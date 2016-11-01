@@ -58,6 +58,10 @@ class BiNode(
     getChild(key)
   }
   def setChild(key: Boolean, node: Node): Unit = {children(key) = node}
+  def setAndGetChild(key: Boolean, node: Node): Node = {
+    setChild(key, node)
+    getChild(key)
+  }
 
   def predict(row: Row): DataValue = getChild(row).predict(row)
   def getLeaf(row: Row): Leaf = getChild(row).getLeaf(row)

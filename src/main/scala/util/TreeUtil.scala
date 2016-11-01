@@ -1,5 +1,5 @@
-package package eucalyptus.util
+package eucalyptus.util
 
 object TreeUtil{
-  
+
 }
