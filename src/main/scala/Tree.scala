@@ -73,7 +73,7 @@ abstract class Leaf(responseSeries: Series[DataValue]) extends Node {
   def getLeaf(row: Row): Leaf = this
 }
 
-class RegressionLeaf(val responseSeries: Series[DataValue])
+class RegressionLeaf(responseSeries: Series[DataValue])
     extends Leaf(responseSeries) {
   // Insert check that DataValue is really NumericalValue
   val mean: NumericalValue = responseSeries.mean
