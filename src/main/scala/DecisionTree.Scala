@@ -19,6 +19,7 @@ trait RegressionTreeLike {
   protected def EvalResponseOnCat
   protected def reduceBlockSummary
 }
+
 trait ClassificationTreeLike
 trait BivariateClassificationTreeLike extends ClassificationTreeLike
 trait MultivariateClassificationTreeLike extends ClassificationTreeLike

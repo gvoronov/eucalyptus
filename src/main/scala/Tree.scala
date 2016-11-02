@@ -9,11 +9,18 @@ import scala.collection.mutable.{Map => MutableMap}
 import koalas.datavalue._
 import koalas.row.Row
 import koalas.series.Series
+import koalas.dataframe.DataFrame
+import koalas.series.Series
 
 sealed abstract class Node {
   val isLeaf: Boolean
 
-  def predict(row: Row): DataValue
+  def getChild(key: Boolean): Node
+  def getChild(row: Row): Node
+  def setChild(key: Boolean, node: Node): Unit
+  def setAndGetChild(key: Boolean, node: Node): Node
+
+  def predict[T](row: Row): T
   def getLeaf(row: Row): Leaf
 }
 
@@ -63,7 +70,7 @@ class BiNode(
     getChild(key)
   }
 
-  def predict(row: Row): DataValue = getChild(row).predict(row)
+  def predict[T](row: Row): T = getChild(row).predict[T](row)
   def getLeaf(row: Row): Leaf = getChild(row).getLeaf(row)
 }
 
@@ -73,7 +80,18 @@ abstract class Leaf(responseSeries: Series[DataValue]) extends Node {
   val isLeaf: Boolean = true
   val numPoints: Int = responseSeries.length
 
-  def predict(row: Row): DataValue = prediction
+
+
+  def getChild(key: Boolean): Node = throw new RuntimeException(
+    "method getChild not defined for Leaf Node type!")
+  def getChild(row: Row): Node = throw new RuntimeException(
+    "method getChild not defined for Leaf Node type!")
+  def setChild(key: Boolean, node: Node): Unit = throw new RuntimeException(
+    "method setChild not defined for Leaf Node type!")
+  def setAndGetChild(key: Boolean, node: Node): Node = throw new RuntimeException(
+    "method setAndGetChild not defined for Leaf Node type!")
+
+  def predict[T](row: Row): T = prediction.asInstanceOf[T]
   def getLeaf(row: Row): Leaf = this
 }
 
@@ -95,14 +113,16 @@ class RegressionLeaf(responseSeries: Series[DataValue])
 // }
 
 
-class BiTree(val root: Node) extends Node{
+class BiTree(val root: Node) {
   val isLeaf: Boolean = root match {
     case _: BiNode => false
     case _: Leaf => true
-    case => throw new RuntimeException("parameter root is not of type BiNode or Leaf!")
+    case _ => throw new RuntimeException("parameter root is not of type BiNode or Leaf!")
   }
 
   def getRoot: Node = root
-  def predict(row: Row): DataValue = root.predict(row)
+
+  def predict[T](row: Row): T = root.predict[T](row)
+  def predict[T](df: DataFrame): Series[T] = df.map((row: Row) => predict[T](row))
   def getLeaf(row: Row): Leaf = root.getLeaf(row)
 }
