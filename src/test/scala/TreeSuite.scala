@@ -6,6 +6,7 @@ import org.scalatest.Assertions._
 import koalas.datasets.bikesharing.BikeSharing
 import koalas.row.Row
 import koalas.datavalue._
+import koalas.numericalops.NumericalOpsImps._
 
 import eucalyptus.tree._
 
@@ -82,7 +83,7 @@ class TreeSuite extends FunSuite {
     val tree = buildSmallTree
     val prediction = tree.predict[NumericalValue](df)
     val actual = df[NumericalValue]("cnt")
-    val mse = ((prediction - actual)**2).mean
+    val mse = ((prediction :- actual):**2).mean
 
     assert(mse ~= 2525308.704797109)
   }

@@ -6,6 +6,7 @@ package eucalyptus.tree
 
 import scala.collection.mutable.{Map => MutableMap}
 
+import koalas.numericalops.NumericalOpsImps._
 import koalas.datavalue._
 import koalas.row.Row
 import koalas.series.Series
@@ -95,7 +96,7 @@ abstract class Leaf(responseSeries: Series[DataValue]) extends Node {
   def getLeaf(row: Row): Leaf = this
 }
 
-class RegressionLeaf(responseSeries: Series[DataValue])
+class RegressionLeaf(responseSeries: Series[NumericalValue])
     extends Leaf(responseSeries) {
   // Insert check that DataValue is really NumericalValue
   val mean: NumericalValue = responseSeries.mean

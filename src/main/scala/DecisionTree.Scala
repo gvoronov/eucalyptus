@@ -1,6 +1,7 @@
 package eucalyptus.decisiontree
 
 import koalas.datavalue._
+import koalas.numericalops.NumericalOpsImps._
 
 import eucalyptus.tree._
 
