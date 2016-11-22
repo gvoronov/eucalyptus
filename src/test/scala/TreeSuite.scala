@@ -6,7 +6,7 @@ import org.scalatest.Assertions._
 import koalas.datasets.bikesharing.BikeSharing
 import koalas.row.Row
 import koalas.datavalue._
-import koalas.numericalops.NumericalOpsImps._
+import koalas.numericalops.NumericalOps._
 
 import eucalyptus.tree._
 
