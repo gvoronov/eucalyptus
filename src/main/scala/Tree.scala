@@ -6,7 +6,7 @@ package eucalyptus.tree
 
 import scala.collection.mutable.{Map => MutableMap}
 
-import koalas.numericalops.NumericalOpsImps._
+import koalas.numericalops.NumericalOps._
 import koalas.datavalue._
 import koalas.row.Row
 import koalas.series.Series
