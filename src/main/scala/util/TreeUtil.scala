@@ -29,8 +29,8 @@ object TreeUtil{
     if(myNumBins == 0)
       return Vector.empty[NumericalValue]
 
-    val binWidths: ArraySeq[Int] = ArraySeq.fill(myNumBins)(myData.length / myNumBins)
-    for (i <- subsetsOfSize(0 until myNumBins, myData.length % myNumBins).draw)
+    val binWidths: ArraySeq[Int] = ArraySeq.fill(myNumBins - 1)(myData.length / myNumBins)
+    for (i <- subsetsOfSize(0 until myNumBins - 1, myData.length % myNumBins).draw)
       binWidths(i) += 1
 
     // Sort input data
