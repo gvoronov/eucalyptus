@@ -11,7 +11,7 @@ import eucalyptus.tree._
 abstract class DecisionTree(
     val maxSplitPoints: Int = 10, val minSplitPoints: Int = 1, val maxDepth: Int = 100,
     val minSamplesSplit: Int = 2, val minSamplesLeaf: Int = 1) {
-  def fit(): Unit
+  def fit(x: DataFrame, predictors: List[String], response: String, weightArray: Series[NumericalValue]): Unit
   def predict[T](x: DataFrame): T
   def predict[T](x: Row): T
   private def fitRecursive(): Unit
