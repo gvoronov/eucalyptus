@@ -1,5 +1,7 @@
 package eucalyptus.decisiontree
 
+import scala.language.implicitConversions
+
 import koalas.dataframe.DataFrame
 import koalas.series.Series
 import koalas.row.Row
@@ -8,10 +10,18 @@ import koalas.numericalops.NumericalOpsImps._
 
 import eucalyptus.tree._
 
+implicit def wrapToOption[T](x: T) = Option[T](x)
+
 abstract class DecisionTree(
     val maxSplitPoints: Int = 10, val minSplitPoints: Int = 1, val maxDepth: Int = 100,
     val minSamplesSplit: Int = 2, val minSamplesLeaf: Int = 1) {
-  def fit(x: DataFrame, predictors: List[String], response: String, weightArray: Series[NumericalValue]): Unit
+  var predictors:  List[String]
+  var response: String
+  def fit(
+      x: DataFrame, y: Option[Series[DataValue]] = None, predictors: Option[List[String]] = None,
+      response: Option[String] = None, weights: Option[Series[NumericalValue]] = None): Unit = {
+    println(response.getOrElse("asdf"))
+  }
   def predict[T](x: DataFrame): T
   def predict[T](x: Row): T
   private def fitRecursive(): Unit
