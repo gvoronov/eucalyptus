@@ -6,33 +6,44 @@ import koalas.dataframe.DataFrame
 import koalas.series.Series
 import koalas.row.Row
 import koalas.datavalue._
-import koalas.numericalops.NumericalOpsImps._
+import koalas.numericalops.NumericalOps._
 
 import eucalyptus.tree._
 
-implicit def wrapToOption[T](x: T) = Option[T](x)
+object DecisionTree {
+  implicit def wrapToOption[T](x: T) = Option[T](x)
+}
 
 abstract class DecisionTree(
     val maxSplitPoints: Int = 10, val minSplitPoints: Int = 1, val maxDepth: Int = 100,
     val minSamplesSplit: Int = 2, val minSamplesLeaf: Int = 1) {
-  var predictors:  List[String]
-  var response: String
+  // var predictors:  List[String]
+  // var response: String
   def fit(
       x: DataFrame, y: Option[Series[DataValue]] = None, predictors: Option[List[String]] = None,
       response: Option[String] = None, weights: Option[Series[NumericalValue]] = None): Unit = {
+    val parsedX: DataFrame = (y, predictors, response) match {
+      case (None, Some(predictors), Some(response)) => {
+
+      }
+      case _ => throw new RuntimeException("")
+    }
+    if (y.isDefined && predictors.isDefined && response.isDefined) {
+
+    } else if
     println(response.getOrElse("asdf"))
   }
-  def predict[T](x: DataFrame): T
-  def predict[T](x: Row): T
-  private def fitRecursive(): Unit
-  private def findBestSplit(): Tuple
+  // def predict[T](x: DataFrame): T
+  // def predict[T](x: Row): T
+  // private def fitRecursive(): Unit
+  // private def findBestSplit(): Tuple
 }
 
 trait RegressionTreeLike {
-  protected def summarizeResponse
-  protected def evalCostFromBlock
-  protected def EvalResponseOnCat
-  protected def reduceBlockSummary
+  protected def summarizeResponse = {}
+  protected def evalCostFromBlock = {}
+  protected def EvalResponseOnCat = {}
+  protected def reduceBlockSummary = {}
 }
 
 trait ClassificationTreeLike
