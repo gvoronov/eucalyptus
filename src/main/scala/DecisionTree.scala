@@ -34,7 +34,7 @@ abstract class DecisionTree(
         this.predictors = Some(predictors)
         this.response = Some(response)
 
-        x  //selected down to predictors and response
+        x.select(predictors :+ response)
       }
       // case (None, Some(predictors), None) => {}
       // case (None, None, Some(response)) => {}
