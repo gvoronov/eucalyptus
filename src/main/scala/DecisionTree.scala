@@ -3,6 +3,7 @@ package eucalyptus.decisiontree
 import scala.language.implicitConversions
 import scala.util.Random
 import scala.util.control.Breaks._
+import scala.collection.mutable.{Map => MutableMap}
 
 import koalas.dataframe.DataFrame
 import koalas.series.Series
@@ -11,6 +12,7 @@ import koalas.datavalue._
 import koalas.numericalops.NumericalOps._
 
 import eucalyptus.tree._
+import eucalyptus.util.TreeUtil
 
 object DecisionTree {
   implicit def wrapToOption[T](x: T) = Option[T](x)
@@ -20,18 +22,28 @@ abstract class DecisionTree(
     val maxSplitPoints: Int = 10, val minSplitPoints: Int = 1, val maxDepth: Int = 100,
     val minSamplesSplit: Int = 2, val minSamplesLeaf: Int = 1) {
   var tree: Option[BiTree] = None
-  var predictors: Option[List[String]] = None
-  var response: Option[String] = None
-  var weight: Option[String] = None
+  var predictorColNames: Option[List[String]] = None
+  var responseColName: Option[String] = None
+  var weightColName: Option[String] = None
   var maxFeaturesPerSplit: Option[Int] = None
 
-  protected type FeatureSupportDict = Option[Map[String, Option[SupportDict]]]
+  protected type FeatureSupportDict = Option[MutableMap[String, Option[SupportDict]]]
+  protected type BestSplit = Tuple4[
+    Option[NumericalValue], Option[NumericalValue], Option[DataFrame],  Option[DataFrame]]
 
   protected case class SupportDict(
       val bins: Option[Vector[NumericalValue]] = None, val maxRefined: Option[Boolean] = None,
       val catMap: Option[Map[DataValue, NumericalValue]] = None,
       val catMappedData: Option[Series[NumericalValue]] = None)
 
+  /**
+   * [x description]
+   * @param x
+   * @param y
+   * @param predictors
+   * @param response
+   * @param weights
+   */
   def fit(
       x: DataFrame, y: Option[Series[DataValue]] = None, predictors: Option[List[String]] = None,
       response: Option[String] = None, weights: Option[Series[NumericalValue]] = None): Unit = {
@@ -68,11 +80,19 @@ abstract class DecisionTree(
   }
   // def predict[T](x: DataFrame): T
   // def predict[T](x: Row): T
+
+  /**
+   * [data description]
+   * @type {[type]}
+   */
   private def fitRecursive(
       data: DataFrame, depth: Int, support: FeatureSupportDict = None,
       parent: Option[BiNode] = None, key: Option[String] = None): Unit = {
     val mySupport = support.getOrElse(
-      predictorColNames.map(predictor => (predictor -> (None: Option[SupportDict]))).toMap)
+      MutableMap(
+        predictorColNames.get.map(predictor => (predictor -> (None: Option[SupportDict]))).toSeq: _*
+      )
+    )
     var costImprovement: NumericalValue = NumericalValue(0)
     var feature: Option[String] = None
     var split: Option[NumericalValue] = None
@@ -80,35 +100,88 @@ abstract class DecisionTree(
     var rightData: Option[DataFrame] = None
 
     // Find optional split, if enough samples in parent node to split and max depth not exceeded.
-    if (data[NumericalValue](weightColName).sum >= minSamplesSplit && depth < maxDepth) {
+    if (data[NumericalValue](weightColName.get).sum >= minSamplesSplit && depth < maxDepth) {
       var numFeaturesConsidered: Int = 0
       breakable {
-        for (feature <- Random.shuffle(predictorColNames)) {
-
+        for (feature <- Random.shuffle(predictorColNames.get)) {
+          mySupport(feature) = preprocessData(feature, data, mySupport(feature))
         }
       }
 
       // Create child node or leaf (figure out by context)
-      val child: Node = if (costImprovement > 0) {
-
-      } else {}
+      // val child: Node = if (costImprovement > 0) {
+      //   if support(selectFeature).catMap.isDefined
+      //     throw new RuntimeException("Not implemnted yet!")
+      //   else {}
+      // } else {}
 
       // Mount child in tree
 
       // Fit deeper branches if current child node is not a leaf
-      if ()! child.isLeaf) {
-        fitRecursive(leftData, depth+1, support?,, child, false)
-        fitRecursive(rightData, depth+1, support?,, child, true)
-      }
+      // if (! child.isLeaf) {
+      //   fitRecursive(leftData, depth+1, support?,, child, false)
+      //   fitRecursive(rightData, depth+1, support?,, child, true)
+      // }
     }
 
   }
 
-  private def preprocessData(): SupportDict = {}
-  private def findBestSplit(): Tuple
+  /**
+   * Internal method used to prepare data for efficeint optimal split search as part of the tree
+   * fitging procedure.
+   * @param feature current feature being considered
+   * @param data is just the portion o fth edata contained in the current node region
+   * @param auxData contains the result of preprocessing produced in previous splits
+   */
+  private def preprocessData(feature: String, data: DataFrame, auxData: Option[SupportDict]): Option[SupportDict] = {
+    data.getSchema.nameToField(feature).fieldType match {
+      case "Numerical" => {
+        val featureData = data[NumericalValue](feature).filter(!_.isNaN)
+
+        auxData match {
+          case Some(auxData) => {
+            val binsOnNewPartition = auxData.bins.get.filter(x => x >= featureData.min && x <= featureData.max)
+            if (auxData.bins.isEmpty && binsOnNewPartition.length <= minSplitPoints) {
+              val bins = TreeUtil.equidepthHist(featureData, maxSplitPoints)
+              val maxRefined: Boolean = bins.length == featureData.distinct.length
+
+              Some(SupportDict(bins = Some(bins), maxRefined = Some(maxRefined)))
+            } else
+              Some(SupportDict(bins = Some(binsOnNewPartition), maxRefined = auxData.maxRefined))
+          }
+          case None => {
+            val bins = TreeUtil.equidepthHist(featureData, maxSplitPoints)
+            val maxRefined: Boolean = bins.length <= maxSplitPoints
+
+            Some(SupportDict(bins = Some(bins), maxRefined = Some(maxRefined)))
+          }
+        }
+      }
+      case "SimpleCategorical" | "ClassCategorical" => {
+        throw new RuntimeException("Not implemented yet")
+      }
+      case _ => throw new RuntimeException("Uknown feature type")
+    }
+  }
+
+  /**
+   * Find the best split of data along the feature column.
+   * @param feature
+   * @param data
+   * @param auxData result of of preprocessData, which contains information to allow for the
+   *                efficient finding of the optimal split
+   */
+  private def findBestSplit(feature: String, data: DataFrame, auxData: Option[SupportDict]):
+      BestSplit = {
+    // Check that feature values on this node are not of a single value
+    if (auxData.get.bins.get.length < 2) return (NumericalValue(0), None, None, None)
+
+    // Split data into samples where feature is mssing and not missing. On samples with a missing
+    // feature, half the weights. Eventually check for feature data type.
+  }
 
 
-  protected def getMaxFeaturesPerSplit: Int = predictors.get.length
+  protected def getMaxFeaturesPerSplit: Int = predictorColNames.get.length
 
   private def getDistinctColumnName(columnNames: List[String], newNameBase: String): String = {
     var newName = newNameBase
