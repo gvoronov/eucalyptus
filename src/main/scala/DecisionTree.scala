@@ -202,19 +202,35 @@ abstract class DecisionTree(
     // will be used to effeciently evalute cost function imporvement on distinct considered
     // splits
     val splitData: Buffer[DataFrame] = Buffer(validData)
-    val blockSummaries: Buffer[] = Buffer.empty
+    val blockSummaries: Buffer[Any] = Buffer.empty
     val splitPoints: Buffer[NumericalValue] = Buffer.empty
     for (i <- 0 until numSplits) {
       val splitPoint = NumericalValue(Uniform(bins(i)(), bins(i + 1)()).sample)
 
-      val (leftData, rightData) = splitData(i).partition(row => row(feature))
+      val (leftData, rightData) = auxData.get.catMap match {
+        case Some(catMap) =>
+          splitData(i).partition(row => catMap(row[CategoricalValue](feature)()) >= splitPoint)
+        case None => splitData(i).partition(row => row[NumericalValue](feature) >= splitPoint)
+      }
+      // if (auxData.get.catMap.isDefined)
+      // val (leftData, rightData) =
 
       splitPoints append splitPoint
       splitData(splitData.length -1) = leftData
       splitData append rightData
       blockSummaries append summarizeResponse(leftData)
-      // Check if can acess contents of for loop after done
     }
+    blockSummaries append summarizeResponse(splitData.last)
+
+    // Evaluate all cost functions for all considered splits
+    val afterSplitCosts: Buffer[NumericalValue] =
+    for (i <- 0 until numSplits) {
+      val leftBlockSummary = blockSummaries.slice(0, i + 1).reduce(reduceBlockSummary)
+      val rightBlockSummary = blockSummaries.slice(i + 1, blockSummaries.length).reduce(reduceBlockSummary)
+
+    }
+
+    // Pick best split and evaluate cost improvement
   }
 
 
