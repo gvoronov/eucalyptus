@@ -202,7 +202,7 @@ abstract class DecisionTree(
     // will be used to effeciently evalute cost function imporvement on distinct considered
     // splits
     val splitData: Buffer[DataFrame] = Buffer(validData)
-    val blockSummaries: Buffer[Any] = Buffer.empty
+    val blockSummaries: Buffer[BlockSummary] = Buffer.empty
     val splitPoints: Buffer[NumericalValue] = Buffer.empty
     for (i <- 0 until numSplits) {
       val splitPoint = NumericalValue(Uniform(bins(i)(), bins(i + 1)()).sample)
@@ -212,8 +212,6 @@ abstract class DecisionTree(
           splitData(i).partition(row => catMap(row[CategoricalValue](feature)()) >= splitPoint)
         case None => splitData(i).partition(row => row[NumericalValue](feature) >= splitPoint)
       }
-      // if (auxData.get.catMap.isDefined)
-      // val (leftData, rightData) =
 
       splitPoints append splitPoint
       splitData(splitData.length -1) = leftData
@@ -228,6 +226,9 @@ abstract class DecisionTree(
       val leftBlockSummary = blockSummaries.slice(0, i + 1).reduce(reduceBlockSummary)
       val rightBlockSummary = blockSummaries.slice(i + 1, blockSummaries.length).reduce(reduceBlockSummary)
 
+      afterSplitCosts append if ()
+        evalCostFromBlock(leftBlockSummary) + evalCostFromBlock(rightBlockSummary)
+      else NumericalValue(Double.PositiveInfinity)
     }
 
     // Pick best split and evaluate cost improvement
@@ -250,6 +251,8 @@ abstract class DecisionTree(
 }
 
 trait RegressionTreeLike {
+  protected case class BlockSummary(
+      val sum0: NumericalValue, val sum1: NumericalValue, val sum2: NumericalValue)
   protected def summarizeResponse = {}
   protected def evalCostFromBlock = {}
   protected def EvalResponseOnCat = {}
