@@ -4,6 +4,9 @@ import scala.language.implicitConversions
 import scala.util.Random
 import scala.util.control.Breaks._
 import scala.collection.mutable.{Map => MutableMap}
+import scala.collection.mutable.Buffer
+
+import breeze.stats.distributions.Uniform
 
 import koalas.dataframe.DataFrame
 import koalas.series.Series
@@ -60,11 +63,11 @@ abstract class DecisionTree(
 
         x.select(predictors :+ response)
       }
-      // case (None, Some(predictors), None) => {}
-      // case (None, None, Some(response)) => {}
-      // case (None, None, None) => {}
-      // case (Some(y), Some(predictors), None) => {}
-      // case (Some(y), None, None) => {}
+      case (None, Some(predictors), None) => throw new RuntimeException("Not implemented yet!")
+      case (None, None, Some(response)) => throw new RuntimeException("Not implemented yet!")
+      case (None, None, None) => throw new RuntimeException("Not implemented yet!")
+      case (Some(y), Some(predictors), None) => throw new RuntimeException("Not implemented yet!")
+      case (Some(y), None, None) => throw new RuntimeException("Not implemented yet!")
       case _ => throw new RuntimeException("Improper arguments passed to fit method!")
     }
 
@@ -173,11 +176,45 @@ abstract class DecisionTree(
    */
   private def findBestSplit(feature: String, data: DataFrame, auxData: Option[SupportDict]):
       BestSplit = {
+    val bins: Vector[NumericalValue] = auxData.get.bins.get
+    val numSplits: Int = bins.length
+
     // Check that feature values on this node are not of a single value
-    if (auxData.get.bins.get.length < 2) return (NumericalValue(0), None, None, None)
+    if (numSplits < 2) return (NumericalValue(0), None, None, None)
 
     // Split data into samples where feature is mssing and not missing. On samples with a missing
     // feature, half the weights. Eventually check for feature data type.
+    val featureIsMissing: Series[Boolean] = data.getSchema.nameToField(feature).fieldType match {
+      case "Numerical" => data[NumericalValue](feature).map(_.isnan)
+      case "SimpleCategorical" | "ClassCategorical" => Series.fill[Boolean](data.length)(false)
+    }
+    val missingData: DataFrame = data(featureIsMissing)
+      .map(row => row.update(weightColName, row[NumericalValue](weightColName) * 0.5))
+    val numMissing = missingData[NumericalValue](weightColName).summarizeResponse
+    val validData = data(featureIsMissing.:!)
+
+    // Checkt that after removing samples with features missing, that the node contains enough
+    // samples to warrant a further split
+    if (validData[NumericalValue](weightColName).sum < minSamplesSplit)
+      return (NumericalValue(0), None, None, None)
+
+    // Break data into chunks separted by split points, also evalute block summaries which
+    // will be used to effeciently evalute cost function imporvement on distinct considered
+    // splits
+    val splitData: Buffer[DataFrame] = Buffer(validData)
+    val blockSummaries: Buffer[] = Buffer.empty
+    val splitPoints: Buffer[NumericalValue] = Buffer.empty
+    for (i <- 0 until numSplits) {
+      val splitPoint = NumericalValue(Uniform(bins(i)(), bins(i + 1)()).sample)
+
+      val (leftData, rightData) = splitData(i).partition(row => row(feature))
+
+      splitPoints append splitPoint
+      splitData(splitData.length -1) = leftData
+      splitData append rightData
+      blockSummaries append summarizeResponse(leftData)
+      // Check if can acess contents of for loop after done
+    }
   }
 
 
