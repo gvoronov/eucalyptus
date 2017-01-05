@@ -32,7 +32,7 @@ abstract class DecisionTree(
 
   protected type FeatureSupportDict = Option[MutableMap[String, Option[SupportDict]]]
   protected type BestSplit = Tuple4[
-    Option[NumericalValue], Option[NumericalValue], Option[DataFrame],  Option[DataFrame]]
+    NumericalValue, Option[NumericalValue], Option[DataFrame],  Option[DataFrame]]
 
   protected case class SupportDict(
       val bins: Option[Vector[NumericalValue]] = None, val maxRefined: Option[Boolean] = None,
@@ -108,6 +108,12 @@ abstract class DecisionTree(
       breakable {
         for (feature <- Random.shuffle(predictorColNames.get)) {
           mySupport(feature) = preprocessData(feature, data, mySupport(feature))
+          val (tmpCostImprovement, tmpSplit, tmpLeftData, tmpRightData) =
+            findBestSplit(feature, data, mySupport(feature))
+
+          // Update current best split
+
+          // Ensure that no more than maxFeaturesPerSplit considered
         }
       }
 
@@ -190,7 +196,7 @@ abstract class DecisionTree(
     }
     val missingData: DataFrame = data(featureIsMissing)
       .map(row => row.update(weightColName, row[NumericalValue](weightColName) * 0.5))
-    val numMissing = missingData[NumericalValue](weightColName).summarizeResponse
+    val numMissing = missingData[NumericalValue](weightColName).sum
     val validData = data(featureIsMissing.:!)
 
     // Checkt that after removing samples with features missing, that the node contains enough
@@ -216,22 +222,41 @@ abstract class DecisionTree(
       splitPoints append splitPoint
       splitData(splitData.length -1) = leftData
       splitData append rightData
-      blockSummaries append summarizeResponse(leftData)
+      blockSummaries append summarizeResponse(leftData, weightColName, responseColName)
     }
-    blockSummaries append summarizeResponse(splitData.last)
+    blockSummaries append summarizeResponse(splitData.last, weightColName, responseColName)
 
     // Evaluate all cost functions for all considered splits
-    val afterSplitCosts: Buffer[NumericalValue] =
+    val afterSplitCosts: Buffer[NumericalValue] = Buffer.empty
     for (i <- 0 until numSplits) {
       val leftBlockSummary = blockSummaries.slice(0, i + 1).reduce(reduceBlockSummary)
-      val rightBlockSummary = blockSummaries.slice(i + 1, blockSummaries.length).reduce(reduceBlockSummary)
-
-      afterSplitCosts append if ()
-        evalCostFromBlock(leftBlockSummary) + evalCostFromBlock(rightBlockSummary)
-      else NumericalValue(Double.PositiveInfinity)
+      val rightBlockSummary = blockSummaries
+        .slice(i + 1, blockSummaries.length).reduce(reduceBlockSummary)
+      afterSplitCosts append (
+        if (
+            leftBlockSummary.sum0 + numMissing >= minSamplesLeaf &&
+            rightBlockSummary.sum0 + numMissing >= minSamplesLeaf)
+          evalCostFromBlock(leftBlockSummary) + evalCostFromBlock(rightBlockSummary)
+        else
+          NumericalValue.posInf
+      )
     }
 
     // Pick best split and evaluate cost improvement
+    val minAfterSplitCost: NumericalValue = afterSplitCosts.min
+    if (minAfterSplitCost < NumericalValue.posInf) {
+      val minCostIndex: Int = Random.shuffle(
+        afterSplitCosts.zipWithIndex.filter(_._1  == minAfterSplitCost).map(_._2)).last
+      val beforeSplitCost: NumericalValue = evalCostFromBlock(blockSummaries.reduce(reduceBlockSummary))
+      val costImprovement: NumericalValue = beforeSplitCost - afterSplitCosts(minCostIndex)
+      val splitPoint: NumericalValue = splitPoints(minCostIndex)
+      val leftData: DataFrame =
+        missingData + splitData.slice(0, minCostIndex + 1).reduce((a, b) => a + b)
+      val rightData: DataFrame =
+        missingData + splitData.slice(minCostIndex + 1, splitData.length).reduce((a, b) => a + b)
+      (costImprovement, Some(splitPoint), Some(leftData), Some(rightData))
+    } else
+      (NumericalValue(0), None, None, None)
   }
 
 
@@ -240,12 +265,10 @@ abstract class DecisionTree(
   private def getDistinctColumnName(columnNames: List[String], newNameBase: String): String = {
     var newName = newNameBase
     var i = 0
-
     while (columnNames contains newName) {
       newName =  newNameBase + i.toString
       i += 1
     }
-
     newName
   }
 }
@@ -253,10 +276,30 @@ abstract class DecisionTree(
 trait RegressionTreeLike {
   protected case class BlockSummary(
       val sum0: NumericalValue, val sum1: NumericalValue, val sum2: NumericalValue)
-  protected def summarizeResponse = {}
-  protected def evalCostFromBlock = {}
+  protected def summarizeResponse(
+      data: DataFrame, weightColName: String, responseColName: String): BlockSummary = {
+    val weights: Series[NumericalValue] = data[NumericalValue](weightColName)
+    val responses: Series[NumericalValue] = data[NumericalValue](responseColName)
+
+    BlockSummary(weights.sum, (weights :* responses).sum, (weights :* (responses :** 2)).sum)
+  }
+  protected def evalCostFromBlock(blockSummary: BlockSummary): NumericalValue =
+    blockSummary.sum2 - ((blockSummary.sum1**2) / blockSummary.sum0)
   protected def EvalResponseOnCat = {}
-  protected def reduceBlockSummary = {}
+  // protected val reduceBlockSummary =
+  //   (leftBlockSummary: BlockSummary, rightBlockSummary: BlockSummary) => BlockSummary(
+  //     leftBlockSummary.sum0 + rightBlockSummary.sum0,
+  //     leftBlockSummary.sum1 + rightBlockSummary.sum1,
+  //     leftBlockSummary.sum2 + rightBlockSummary.sum2
+  //   )
+  protected def reduceBlockSummary(
+      leftBlockSummary: BlockSummary, rightBlockSummary: BlockSummary): BlockSummary = {
+    BlockSummary(
+      leftBlockSummary.sum0 + rightBlockSummary.sum0,
+      leftBlockSummary.sum1 + rightBlockSummary.sum1,
+      leftBlockSummary.sum2 + rightBlockSummary.sum2
+    )
+  }
 }
 
 trait ClassificationTreeLike
