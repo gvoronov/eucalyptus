@@ -24,6 +24,13 @@ object DecisionTree {
 abstract class DecisionTree(
     val maxSplitPoints: Int = 10, val minSplitPoints: Int = 1, val maxDepth: Int = 100,
     val minSamplesSplit: Int = 2, val minSamplesLeaf: Int = 1) {
+
+  protected class BlockSummary(val sum0: NumericalValue)
+  protected def summarizeResponse(
+      data: DataFrame, weightColName: String, responseColName: String): BlockSummary
+  protected def reduceBlockSummary(
+      leftBlockSummary: BlockSummary, rightBlockSummary: BlockSummary): BlockSummary
+  protected def evalCostFromBlock(blockSummary: BlockSummary): NumericalValue
   var tree: Option[BiTree] = None
   var predictorColNames: Option[List[String]] = None
   var responseColName: Option[String] = None
@@ -191,17 +198,17 @@ abstract class DecisionTree(
     // Split data into samples where feature is mssing and not missing. On samples with a missing
     // feature, half the weights. Eventually check for feature data type.
     val featureIsMissing: Series[Boolean] = data.getSchema.nameToField(feature).fieldType match {
-      case "Numerical" => data[NumericalValue](feature).map(_.isnan)
+      case "Numerical" => data[NumericalValue](feature).map(_.isNaN)
       case "SimpleCategorical" | "ClassCategorical" => Series.fill[Boolean](data.length)(false)
     }
     val missingData: DataFrame = data(featureIsMissing)
-      .map(row => row.update(weightColName, row[NumericalValue](weightColName) * 0.5))
-    val numMissing = missingData[NumericalValue](weightColName).sum
+      .map(row => row.update(weightColName.get, row[NumericalValue](weightColName.get) * 0.5))
+    val numMissing = missingData[NumericalValue](weightColName.get).sum
     val validData = data(featureIsMissing.:!)
 
     // Checkt that after removing samples with features missing, that the node contains enough
     // samples to warrant a further split
-    if (validData[NumericalValue](weightColName).sum < minSamplesSplit)
+    if (validData[NumericalValue](weightColName.get).sum < minSamplesSplit)
       return (NumericalValue(0), None, None, None)
 
     // Break data into chunks separted by split points, also evalute block summaries which
@@ -213,18 +220,18 @@ abstract class DecisionTree(
     for (i <- 0 until numSplits) {
       val splitPoint = NumericalValue(Uniform(bins(i)(), bins(i + 1)()).sample)
 
-      val (leftData, rightData) = auxData.get.catMap match {
+      val (leftData, rightData): Tuple2[DataFrame, DataFrame] = auxData.get.catMap match {
         case Some(catMap) =>
-          splitData(i).partition(row => catMap(row[CategoricalValue](feature)()) >= splitPoint)
+          splitData(i).partition(row => catMap(row[CategoricalValue](feature)) >= splitPoint)
         case None => splitData(i).partition(row => row[NumericalValue](feature) >= splitPoint)
       }
 
       splitPoints append splitPoint
       splitData(splitData.length -1) = leftData
       splitData append rightData
-      blockSummaries append summarizeResponse(leftData, weightColName, responseColName)
+      blockSummaries append summarizeResponse(leftData, weightColName.get, responseColName.get)
     }
-    blockSummaries append summarizeResponse(splitData.last, weightColName, responseColName)
+    blockSummaries append summarizeResponse(splitData.last, weightColName.get, responseColName.get)
 
     // Evaluate all cost functions for all considered splits
     val afterSplitCosts: Buffer[NumericalValue] = Buffer.empty
@@ -273,18 +280,23 @@ abstract class DecisionTree(
   }
 }
 
-trait RegressionTreeLike {
-  protected case class BlockSummary(
-      val sum0: NumericalValue, val sum1: NumericalValue, val sum2: NumericalValue)
+trait RegressionTreeLike extends DecisionTree {
+  protected case class RegressionBlockSummary(
+      override val sum0: NumericalValue, val sum1: NumericalValue, val sum2: NumericalValue) extends BlockSummary(sum0)
   protected def summarizeResponse(
       data: DataFrame, weightColName: String, responseColName: String): BlockSummary = {
     val weights: Series[NumericalValue] = data[NumericalValue](weightColName)
     val responses: Series[NumericalValue] = data[NumericalValue](responseColName)
 
-    BlockSummary(weights.sum, (weights :* responses).sum, (weights :* (responses :** 2)).sum)
+    RegressionBlockSummary(
+      weights.sum, (weights :* responses).sum, (weights :* (responses :** 2)).sum)
+      .asInstanceOf[BlockSummary]
   }
-  protected def evalCostFromBlock(blockSummary: BlockSummary): NumericalValue =
-    blockSummary.sum2 - ((blockSummary.sum1**2) / blockSummary.sum0)
+  protected def evalCostFromBlock(blockSummary: BlockSummary): NumericalValue = {
+    // Try by adding asInstanceOf to every term and factor
+    val regressionBlockSummary = blockSummary.asInstanceOf[RegressionBlockSummary]
+    regressionBlockSummary.sum2 - ((regressionBlockSummary.sum1**2) / regressionBlockSummary.sum0)
+  }
   protected def EvalResponseOnCat = {}
   // protected val reduceBlockSummary =
   //   (leftBlockSummary: BlockSummary, rightBlockSummary: BlockSummary) => BlockSummary(
@@ -294,11 +306,13 @@ trait RegressionTreeLike {
   //   )
   protected def reduceBlockSummary(
       leftBlockSummary: BlockSummary, rightBlockSummary: BlockSummary): BlockSummary = {
-    BlockSummary(
-      leftBlockSummary.sum0 + rightBlockSummary.sum0,
-      leftBlockSummary.sum1 + rightBlockSummary.sum1,
-      leftBlockSummary.sum2 + rightBlockSummary.sum2
-    )
+    val leftRegressionBlockSummary = leftBlockSummary.asInstanceOf[RegressionBlockSummary]
+    val rightRegressionBlockSummary = rightBlockSummary.asInstanceOf[RegressionBlockSummary]
+    RegressionBlockSummary(
+      leftRegressionBlockSummary.sum0 + rightRegressionBlockSummary.sum0,
+      leftRegressionBlockSummary.sum1 + rightRegressionBlockSummary.sum1,
+      leftRegressionBlockSummary.sum2 + rightRegressionBlockSummary.sum2
+    ).asInstanceOf[BlockSummary]
   }
 }
 
