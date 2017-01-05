@@ -24,23 +24,32 @@ object DecisionTree {
 abstract class DecisionTree(
     val maxSplitPoints: Int = 10, val minSplitPoints: Int = 1, val maxDepth: Int = 100,
     val minSamplesSplit: Int = 2, val minSamplesLeaf: Int = 1) {
-
+  // abstract defs and classes required by fit method, actually implmented in sub traits
   protected class BlockSummary(val sum0: NumericalValue)
   protected def summarizeResponse(
       data: DataFrame, weightColName: String, responseColName: String): BlockSummary
   protected def reduceBlockSummary(
       leftBlockSummary: BlockSummary, rightBlockSummary: BlockSummary): BlockSummary
   protected def evalCostFromBlock(blockSummary: BlockSummary): NumericalValue
+
+  // Self properties set by fit method
   var tree: Option[BiTree] = None
   var predictorColNames: Option[List[String]] = None
   var responseColName: Option[String] = None
   var weightColName: Option[String] = None
   var maxFeaturesPerSplit: Option[Int] = None
 
+  // A few type aliases to reduce horrible long expressoins
   protected type FeatureSupportDict = Option[MutableMap[String, Option[SupportDict]]]
   protected type BestSplit = Tuple4[
     NumericalValue, Option[NumericalValue], Option[DataFrame],  Option[DataFrame]]
 
+  /**
+   * Container for results of preprocessing that can be easily passed around
+   * @param bins
+   * @param maxRefined
+   * @param catMap
+   */
   protected case class SupportDict(
       val bins: Option[Vector[NumericalValue]] = None, val maxRefined: Option[Boolean] = None,
       val catMap: Option[Map[DataValue, NumericalValue]] = None,
@@ -282,7 +291,8 @@ abstract class DecisionTree(
 
 trait RegressionTreeLike extends DecisionTree {
   protected case class RegressionBlockSummary(
-      override val sum0: NumericalValue, val sum1: NumericalValue, val sum2: NumericalValue) extends BlockSummary(sum0)
+      override val sum0: NumericalValue, val sum1: NumericalValue, val sum2: NumericalValue)
+      extends BlockSummary(sum0)
   protected def summarizeResponse(
       data: DataFrame, weightColName: String, responseColName: String): BlockSummary = {
     val weights: Series[NumericalValue] = data[NumericalValue](weightColName)
@@ -298,12 +308,6 @@ trait RegressionTreeLike extends DecisionTree {
     regressionBlockSummary.sum2 - ((regressionBlockSummary.sum1**2) / regressionBlockSummary.sum0)
   }
   protected def EvalResponseOnCat = {}
-  // protected val reduceBlockSummary =
-  //   (leftBlockSummary: BlockSummary, rightBlockSummary: BlockSummary) => BlockSummary(
-  //     leftBlockSummary.sum0 + rightBlockSummary.sum0,
-  //     leftBlockSummary.sum1 + rightBlockSummary.sum1,
-  //     leftBlockSummary.sum2 + rightBlockSummary.sum2
-  //   )
   protected def reduceBlockSummary(
       leftBlockSummary: BlockSummary, rightBlockSummary: BlockSummary): BlockSummary = {
     val leftRegressionBlockSummary = leftBlockSummary.asInstanceOf[RegressionBlockSummary]
@@ -311,8 +315,8 @@ trait RegressionTreeLike extends DecisionTree {
     RegressionBlockSummary(
       leftRegressionBlockSummary.sum0 + rightRegressionBlockSummary.sum0,
       leftRegressionBlockSummary.sum1 + rightRegressionBlockSummary.sum1,
-      leftRegressionBlockSummary.sum2 + rightRegressionBlockSummary.sum2
-    ).asInstanceOf[BlockSummary]
+      leftRegressionBlockSummary.sum2 + rightRegressionBlockSummary.sum2)
+      .asInstanceOf[BlockSummary]
   }
 }
 
