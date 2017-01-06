@@ -34,7 +34,7 @@ sealed abstract class Node {
  *        NumericalValue so that a split rule may be applied.
  */
 class BiNode(
-    val feature: String, val split: Double, val catMap: Map[DataValue, NumericalValue]=Map.empty)
+    val feature: String, val split: NumericalValue, val catMap: Map[DataValue, NumericalValue]=Map.empty)
     extends Node {
   protected var children: MutableMap[Boolean, Node] = MutableMap.empty
 

@@ -14,7 +14,7 @@ class TreeSuite extends FunSuite {
   val df = BikeSharing.loadDayDF
 
   def buildSmallTree: BiTree = {
-    val tree = new BiTree(new BiNode("atemp", 0.5))
+    val tree = new BiTree(new BiNode("atemp", NumericalValue(0.5)))
 
     val df0 = df.filter(_[NumericalValue]("atemp") < 0.5)
     val df1 = df.filter(_[NumericalValue]("atemp") >= 0.5)
@@ -22,7 +22,7 @@ class TreeSuite extends FunSuite {
     val gen0: Node = tree.root.setAndGetChild(
       false, new RegressionLeaf(df0.select[NumericalValue]("cnt")))
     val gen1: Node = tree.root.setAndGetChild(
-      true, new BiNode("holiday", 0.5,
+      true, new BiNode("holiday", NumericalValue(0.5),
       Map(
         CategoricalValue("0", "holiday") -> NumericalValue(0),
         CategoricalValue("1", "holiday") -> NumericalValue(1)

@@ -35,6 +35,7 @@ abstract class DecisionTree(
   protected def reduceBlockSummary(
       leftBlockSummary: BlockSummary, rightBlockSummary: BlockSummary): BlockSummary
   protected def evalCostFromBlock(blockSummary: BlockSummary): NumericalValue
+  protected def createLeaf(responses: Series[DataValue]): Leaf
 
   // Self properties set by fit method
   var tree: Option[BiTree] = None
@@ -101,16 +102,21 @@ abstract class DecisionTree(
     maxFeaturesPerSplit = Some(getMaxFeaturesPerSplit)
     fitRecursive(parsedX, 0)
   }
-  // def predict[T](x: DataFrame): T
-  // def predict[T](x: Row): T
+  def predict[T](x: DataFrame): Series[T] = x.map[T](predict[T](_))
+  def predict[T](x: Row): T = tree.get.predict[T](x)
 
   /**
-   * [data description]
-   * @type {[type]}
+   * Fit a decision tree by finding the best split and recusrively doing so on each partition
+   * of resulting split
+   * @param data
+   * @param depth
+   * @param support
+   * @param parent
+   * @param key
    */
   private def fitRecursive(
       data: DataFrame, depth: Int, support: FeatureSupportDict = None,
-      parent: Option[BiNode] = None, key: Option[String] = None): Unit = {
+      parent: Option[Node] = None, key: Option[Boolean] = None): Unit = {
     val mySupport = support.getOrElse(
       MutableMap(
         predictorColNames.get.map(predictor => (predictor -> (None: Option[SupportDict]))).toSeq: _*
@@ -126,36 +132,50 @@ abstract class DecisionTree(
     if (data[NumericalValue](weightColName.get).sum >= minSamplesSplit && depth < maxDepth) {
       var numFeaturesConsidered: Int = 0
       breakable {
-        for (feature <- Random.shuffle(predictorColNames.get)) {
-          mySupport(feature) = preprocessData(feature, data, mySupport(feature))
+        for (tmpFeature <- Random.shuffle(predictorColNames.get)) {
+          mySupport(tmpFeature) = preprocessData(tmpFeature, data, mySupport(tmpFeature))
           val (tmpCostImprovement, tmpSplit, tmpLeftData, tmpRightData) =
-            findBestSplit(feature, data, mySupport(feature))
-          println(tmpCostImprovement)
-          println(tmpSplit.get)
-          println(tmpLeftData.get.length)
-          println(tmpRightData.get.length)
+            findBestSplit(tmpFeature, data, mySupport(tmpFeature))
+
           // Update current best split
+          if (tmpCostImprovement > costImprovement) {
+            costImprovement = tmpCostImprovement
+            feature = Some(tmpFeature)
+            split = tmpSplit
+            leftData = tmpLeftData
+            rightData = tmpRightData
+          }
 
           // Ensure that no more than maxFeaturesPerSplit considered
+          if (tmpCostImprovement > 0){
+            numFeaturesConsidered += 1
+            if (numFeaturesConsidered >= maxFeaturesPerSplit.get)
+              break
+          }
         }
       }
-
-      // Create child node or leaf (figure out by context)
-      // val child: Node = if (costImprovement > 0) {
-      //   if support(selectFeature).catMap.isDefined
-      //     throw new RuntimeException("Not implemnted yet!")
-      //   else {}
-      // } else {}
-
-      // Mount child in tree
-
-      // Fit deeper branches if current child node is not a leaf
-      // if (! child.isLeaf) {
-      //   fitRecursive(leftData, depth+1, support?,, child, false)
-      //   fitRecursive(rightData, depth+1, support?,, child, true)
-      // }
     }
 
+    // Create child node or leaf (figure out by context)
+    val child: Node = if (costImprovement > 0) {
+      if (mySupport(feature.get).get.catMap.isDefined)
+        throw new RuntimeException("Not implemnted yet!")
+      else
+        new BiNode(feature.get, split.get)
+    } else
+      createLeaf(data[DataValue](responseColName.get))
+
+    // Mount child in tree
+    if (parent.isEmpty)
+      tree = Some(new BiTree(child))
+    else
+      parent.get.setChild(key.get, child)
+
+    // Fit deeper branches if current child node is not a leaf
+    if (! child.isLeaf) {
+      fitRecursive(leftData.get, depth+1, Some(mySupport.clone), Some(child), Some(false))
+      fitRecursive(rightData.get, depth+1, Some(mySupport.clone), Some(child), Some(true))
+    }
   }
 
   /**
@@ -198,18 +218,18 @@ abstract class DecisionTree(
 
   /**
    * Find the best split of data along the feature column.
-   * @param feature
-   * @param data
+   * @param feature consider a split in this feature of the data
+   * @param data the dataframe to consider splitting
    * @param auxData result of of preprocessData, which contains information to allow for the
    *                efficient finding of the optimal split
    */
   private def findBestSplit(feature: String, data: DataFrame, auxData: Option[SupportDict]):
       BestSplit = {
     val bins: Vector[NumericalValue] = auxData.get.bins.get
-    val numSplits: Int = bins.length
+    val numSplits: Int = bins.length - 1
 
     // Check that feature values on this node are not of a single value
-    if (numSplits < 2) return (NumericalValue(0), None, None, None)
+    if (numSplits < 1) return (NumericalValue(0), None, None, None)
 
     // Split data into samples where feature is mssing and not missing. On samples with a missing
     // feature, half the weights. Eventually check for feature data type.
@@ -238,8 +258,8 @@ abstract class DecisionTree(
 
       val (leftData, rightData): Tuple2[DataFrame, DataFrame] = auxData.get.catMap match {
         case Some(catMap) =>
-          splitData(i).partition(row => catMap(row[CategoricalValue](feature)) >= splitPoint)
-        case None => splitData(i).partition(row => row[NumericalValue](feature) >= splitPoint)
+          splitData(i).partition(row => catMap(row[CategoricalValue](feature)) < splitPoint)
+        case None => splitData(i).partition(row => row[NumericalValue](feature) < splitPoint)
       }
 
       splitPoints append splitPoint
@@ -282,7 +302,6 @@ abstract class DecisionTree(
       (NumericalValue(0), None, None, None)
   }
 
-
   protected def getMaxFeaturesPerSplit: Int = predictorColNames.get.length
 
   private def getDistinctColumnName(columnNames: List[String], newNameBase: String): String = {
@@ -295,7 +314,10 @@ abstract class DecisionTree(
     newName
   }
 }
-// trait RegressionTreeLike extends DecisionTree {
+
+/**
+ * This trait contains methods required for the fitting adn prediction on regression trees.
+ */
 sealed trait RegressionTreeLike extends WithBlockSummary {
   protected case class RegressionBlockSummary(
       override val sum0: NumericalValue, val sum1: NumericalValue, val sum2: NumericalValue)
@@ -314,7 +336,7 @@ sealed trait RegressionTreeLike extends WithBlockSummary {
     val regressionBlockSummary = blockSummary.asInstanceOf[RegressionBlockSummary]
     regressionBlockSummary.sum2 - ((regressionBlockSummary.sum1**2) / regressionBlockSummary.sum0)
   }
-  protected def evalResponseOnCat = {}
+  // protected def evalResponseOnCat = {}
   protected def reduceBlockSummary(
       leftBlockSummary: BlockSummary, rightBlockSummary: BlockSummary): BlockSummary = {
     val leftRegressionBlockSummary = leftBlockSummary.asInstanceOf[RegressionBlockSummary]
@@ -325,6 +347,8 @@ sealed trait RegressionTreeLike extends WithBlockSummary {
       leftRegressionBlockSummary.sum2 + rightRegressionBlockSummary.sum2)
       .asInstanceOf[BlockSummary]
   }
+  protected def createLeaf(responses: Series[DataValue]): Leaf =
+    new RegressionLeaf(responses.asInstanceOf[Series[NumericalValue]]).asInstanceOf[Leaf]
 }
 
 sealed trait ClassificationTreeLike
