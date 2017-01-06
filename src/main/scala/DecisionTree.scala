@@ -99,7 +99,7 @@ abstract class DecisionTree(
     }
 
     maxFeaturesPerSplit = Some(getMaxFeaturesPerSplit)
-    // fitRecursive(parsedX, 0)
+    fitRecursive(parsedX, 0)
   }
   // def predict[T](x: DataFrame): T
   // def predict[T](x: Row): T
@@ -130,7 +130,10 @@ abstract class DecisionTree(
           mySupport(feature) = preprocessData(feature, data, mySupport(feature))
           val (tmpCostImprovement, tmpSplit, tmpLeftData, tmpRightData) =
             findBestSplit(feature, data, mySupport(feature))
-
+          println(tmpCostImprovement)
+          println(tmpSplit.get)
+          println(tmpLeftData.get.length)
+          println(tmpRightData.get.length)
           // Update current best split
 
           // Ensure that no more than maxFeaturesPerSplit considered
