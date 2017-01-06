@@ -21,11 +21,15 @@ object DecisionTree {
   implicit def wrapToOption[T](x: T) = Option[T](x)
 }
 
-abstract class DecisionTree(
-    val maxSplitPoints: Int = 10, val minSplitPoints: Int = 1, val maxDepth: Int = 100,
-    val minSamplesSplit: Int = 2, val minSamplesLeaf: Int = 1) {
-  // abstract defs and classes required by fit method, actually implmented in sub traits
+sealed trait WithBlockSummary {
   protected class BlockSummary(val sum0: NumericalValue)
+}
+
+abstract class DecisionTree(
+    val maxSplitPoints: Int, val minSplitPoints: Int, val maxDepth: Int, val minSamplesSplit: Int,
+    val minSamplesLeaf: Int) extends WithBlockSummary {
+  // abstract defs and classes required by fit method, actually implmented in sub traits
+  // protected class BlockSummary(val sum0: NumericalValue)
   protected def summarizeResponse(
       data: DataFrame, weightColName: String, responseColName: String): BlockSummary
   protected def reduceBlockSummary(
@@ -288,8 +292,8 @@ abstract class DecisionTree(
     newName
   }
 }
-
-trait RegressionTreeLike extends DecisionTree {
+// trait RegressionTreeLike extends DecisionTree {
+sealed trait RegressionTreeLike extends WithBlockSummary {
   protected case class RegressionBlockSummary(
       override val sum0: NumericalValue, val sum1: NumericalValue, val sum2: NumericalValue)
       extends BlockSummary(sum0)
@@ -307,7 +311,7 @@ trait RegressionTreeLike extends DecisionTree {
     val regressionBlockSummary = blockSummary.asInstanceOf[RegressionBlockSummary]
     regressionBlockSummary.sum2 - ((regressionBlockSummary.sum1**2) / regressionBlockSummary.sum0)
   }
-  protected def EvalResponseOnCat = {}
+  protected def evalResponseOnCat = {}
   protected def reduceBlockSummary(
       leftBlockSummary: BlockSummary, rightBlockSummary: BlockSummary): BlockSummary = {
     val leftRegressionBlockSummary = leftBlockSummary.asInstanceOf[RegressionBlockSummary]
@@ -320,11 +324,15 @@ trait RegressionTreeLike extends DecisionTree {
   }
 }
 
-trait ClassificationTreeLike
-trait BivariateClassificationTreeLike extends ClassificationTreeLike
-trait MultivariateClassificationTreeLike extends ClassificationTreeLike
-trait DecorrelatedTreeLike
+sealed trait ClassificationTreeLike
+sealed trait BivariateClassificationTreeLike extends ClassificationTreeLike
+sealed trait MultivariateClassificationTreeLike extends ClassificationTreeLike
+sealed trait DecorrelatedTreeLike
 
-class RegressionTree extends DecisionTree with RegressionTreeLike
+class RegressionTree(
+    maxSplitPoints: Int = 10, minSplitPoints: Int = 1, maxDepth: Int = 100,
+    minSamplesSplit: Int = 2, minSamplesLeaf: Int = 1)
+    extends DecisionTree(maxSplitPoints, minSplitPoints, maxDepth, minSamplesSplit, minSamplesLeaf)
+    with RegressionTreeLike
 
-class DecorrelatedRegressionTree extends DecisionTree with RegressionTreeLike with DecorrelatedTreeLike
+// class DecorrelatedRegressionTree extends DecisionTree with RegressionTreeLike with DecorrelatedTreeLike
