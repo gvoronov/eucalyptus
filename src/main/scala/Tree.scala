@@ -4,6 +4,7 @@ package eucalyptus.tree
  * decision tree.
  */
 
+import scala.util.Random
 import scala.collection.mutable.{Map => MutableMap}
 
 import koalas.numericalops.NumericalOps._
@@ -59,7 +60,7 @@ class BiNode(
   def getChild(row: Row): Node = {
     val key: Boolean = row.select(feature) match {
       case value: NumericalValue => value >= split
-      case value: CategoricalValue => catMap(value) >= split
+      case value: CategoricalValue => catMap.getOrElse(value, split + Random.nextDouble) >= split
       case _ => throw new RuntimeException(
         "feature " + feature + " of row contains value that can't be evaluate")
     }
@@ -80,8 +81,6 @@ abstract class Leaf(responseSeries: Series[DataValue]) extends Node {
 
   val isLeaf: Boolean = true
   val numPoints: Int = responseSeries.length
-
-
 
   def getChild(key: Boolean): Node = throw new RuntimeException(
     "method getChild not defined for Leaf Node type!")

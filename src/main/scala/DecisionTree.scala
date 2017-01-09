@@ -36,6 +36,8 @@ abstract class DecisionTree(
       leftBlockSummary: BlockSummary, rightBlockSummary: BlockSummary): BlockSummary
   protected def evalCostFromBlock(blockSummary: BlockSummary): NumericalValue
   protected def createLeaf(responses: Series[DataValue]): Leaf
+  protected def getCatMap(
+      feature: String, responseColName: String, data: DataFrame): Map[DataValue, NumericalValue]
 
   // Self properties set by fit method
   var tree: Option[BiTree] = None
@@ -57,8 +59,7 @@ abstract class DecisionTree(
    */
   protected case class SupportDict(
       val bins: Option[Vector[NumericalValue]] = None, val maxRefined: Option[Boolean] = None,
-      val catMap: Option[Map[DataValue, NumericalValue]] = None,
-      val catMappedData: Option[Series[NumericalValue]] = None)
+      val catMap: Option[Map[DataValue, NumericalValue]] = None)
 
   /**
    * [x description]
@@ -158,10 +159,15 @@ abstract class DecisionTree(
 
     // Create child node or leaf (figure out by context)
     val child: Node = if (costImprovement > 0) {
-      if (mySupport(feature.get).get.catMap.isDefined)
-        throw new RuntimeException("Not implemnted yet!")
-      else
-        new BiNode(feature.get, split.get)
+      mySupport(feature.get).get.catMap match {
+        case Some(catMap) => new BiNode(feature.get, split.get, catMap)
+        case None => new BiNode(feature.get, split.get)
+      }
+      // if (mySupport(feature.get).get.catMap.isDefined)
+      //   new BiNode(feature.get, split.get, )
+      //   // throw new RuntimeException("Not implemnted yet!")
+      // else
+      //   new BiNode(feature.get, split.get)
     } else
       createLeaf(data[DataValue](responseColName.get))
 
@@ -210,7 +216,14 @@ abstract class DecisionTree(
         }
       }
       case "SimpleCategorical" | "ClassCategorical" => {
-        throw new RuntimeException("Not implemented yet")
+        val catMap = getCatMap(feature, responseColName.get, data)
+
+        val bins = if (catMap.size < maxSplitPoints)
+          catMap.values.toVector.sorted
+        else
+          TreeUtil.equidepthHist(data[DataValue](feature).map(catMap(_)), maxSplitPoints)
+
+        Some(SupportDict(bins = Some(bins), catMap = Some(catMap)))
       }
       case _ => throw new RuntimeException("Uknown feature type")
     }
@@ -349,6 +362,20 @@ sealed trait RegressionTreeLike extends WithBlockSummary {
   }
   protected def createLeaf(responses: Series[DataValue]): Leaf =
     new RegressionLeaf(responses.asInstanceOf[Series[NumericalValue]]).asInstanceOf[Leaf]
+
+  /**
+   * Partition data by category, evaluate
+   * @param feature
+   * @param responseColName
+   * @param data
+   */
+  protected def getCatMap(feature: String, responseColName: String, data: DataFrame):
+      Map[DataValue, NumericalValue] = {
+    data.groupBy(row => row[DataValue](feature))
+      .map(kvpair => kvpair._1 -> kvpair._2[NumericalValue](responseColName).mean)
+      .toList.sortBy(_._2).map(_._1).zipWithIndex
+      .map(pair => pair._1 -> NumericalValue(pair._2)).toMap
+  }
 }
 
 sealed trait ClassificationTreeLike
