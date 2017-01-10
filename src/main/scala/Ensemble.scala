@@ -1,8 +1,8 @@
 package eucalyptus.ensemble
 
-class EnsembleModel
+import eucalyptus.decisiontree._
 
-trait Bagging extends EnsembleModel {
+sealed trait Bagging {
   def fit (
       x: DataFrame, y: Option[Series[DataValue]] = None, predictors: Option[List[String]] = None,
       response: Option[String] = None, weights: Option[Series[NumericalValue]] = None): Unit = {
@@ -12,7 +12,13 @@ trait Bagging extends EnsembleModel {
 
 }
 
-class BaggingRegressor extends Bagging
+class BaggingRegressor(
+    val numTrees: Int = 10, val maxSplitPoints: Int = 10, val minSplitPoints: Int = 1,
+    val maxDepth: Int = 100, val minSamplesSplit: Int = 2, val minSamplesLeaf: Int = 1)
+    extends Bagging {
+  val forest = List.fill(numTrees)(
+    new RegressionTree(maxSplitPoints, minSplitPoints, maxDepth, minSamplesSplit, minSamplesLeaf))  
+}
 class BaggingClassifier extends Bagging {
   throw new RuntimeException("Not implemented yet!")
 }
@@ -24,7 +30,7 @@ class BaggingMultivariateClassifier extends BaggingClassifier {
 }
 trait RandomForest
 class RandomForestRegressor  extends BaggingRegressor with RandomForest {
-
+  override val forest =
 }
 class RandomForestClassifier extends BaggingClassifier with RandomForest {
   throw new RuntimeException("Not implemented yet!")
