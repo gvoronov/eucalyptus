@@ -1,9 +1,12 @@
 package eucalyptus.decisiontree
 
+import scala.math
 import scala.language.implicitConversions
 import scala.util.Random
 import scala.util.control.Breaks._
+// import scala.collection.mutable then Buffer -> mutable.Buffer and MutableMap -> mutable.Map
 import scala.collection.mutable.{Map => MutableMap}
+// import scala.collection.mutable.{ArrayBuffer => Buffer}
 import scala.collection.mutable.Buffer
 
 import breeze.stats.distributions.Uniform
@@ -19,6 +22,8 @@ import eucalyptus.util.TreeUtil
 
 object DecisionTree {
   implicit def wrapToOption[T](x: T) = Option[T](x)
+  implicit def wrapToLeft[A, B](x: A) = Left[A, B](x)
+  implicit def wrapToRight[A, B](x: B) = Right[A, B](x)
 }
 
 sealed trait WithBlockSummary {
@@ -30,21 +35,13 @@ abstract class DecisionTree(
     val minSamplesLeaf: Int) extends WithBlockSummary {
   // abstract defs and classes required by fit method, actually implmented in sub traits
   // protected class BlockSummary(val sum0: NumericalValue)
-  protected def summarizeResponse(
-      data: DataFrame, weightColName: String, responseColName: String): BlockSummary
+  protected def summarizeResponse(data: DataFrame): BlockSummary
   protected def reduceBlockSummary(
       leftBlockSummary: BlockSummary, rightBlockSummary: BlockSummary): BlockSummary
   protected def evalCostFromBlock(blockSummary: BlockSummary): NumericalValue
   protected def createLeaf(responses: Series[DataValue]): Leaf
   protected def getCatMap(
-      feature: String, responseColName: String, data: DataFrame): Map[DataValue, NumericalValue]
-
-  // Self properties set by fit method
-  var tree: Option[BiTree] = None
-  var predictorColNames: Option[List[String]] = None
-  var responseColName: Option[String] = None
-  var weightColName: Option[String] = None
-  var maxFeaturesPerSplit: Option[Int] = None
+      feature: String, data: DataFrame): Map[DataValue, NumericalValue]
 
   // A few type aliases to reduce horrible long expressoins
   protected type FeatureSupportDict = Option[MutableMap[String, Option[SupportDict]]]
@@ -60,6 +57,13 @@ abstract class DecisionTree(
   protected case class SupportDict(
       val bins: Option[Vector[NumericalValue]] = None, val maxRefined: Option[Boolean] = None,
       val catMap: Option[Map[DataValue, NumericalValue]] = None)
+
+  // Self properties set by fit method
+  protected var tree: Option[BiTree] = None
+  protected var predictorColNames: Option[List[String]] = None
+  protected var responseColName: Option[String] = None
+  protected var weightColName: Option[String] = None
+  protected var myMaxFeaturesPerSplit: Option[Int] = None
 
   /**
    * [x description]
@@ -100,10 +104,11 @@ abstract class DecisionTree(
       case None => parsedX.update(weightColName.get, NumericalValue(1))
     }
 
-    maxFeaturesPerSplit = Some(getMaxFeaturesPerSplit)
+    myMaxFeaturesPerSplit = Some(getMaxFeaturesPerSplit)
     fitRecursive(parsedX, 0)
   }
-  def predict[T](x: DataFrame): Series[T] = x.map[T](predict[T](_))
+  // def predict[T](x: DataFrame): Series[T] = x.map[T](predict[T](_))
+  def predict[T](x: DataFrame): Series[T] = tree.get.predict[T](x)
   def predict[T](x: Row): T = tree.get.predict[T](x)
 
   /**
@@ -150,7 +155,7 @@ abstract class DecisionTree(
           // Ensure that no more than maxFeaturesPerSplit considered
           if (tmpCostImprovement > 0){
             numFeaturesConsidered += 1
-            if (numFeaturesConsidered >= maxFeaturesPerSplit.get)
+            if (numFeaturesConsidered >= myMaxFeaturesPerSplit.get)
               break
           }
         }
@@ -216,7 +221,7 @@ abstract class DecisionTree(
         }
       }
       case "SimpleCategorical" | "ClassCategorical" => {
-        val catMap = getCatMap(feature, responseColName.get, data)
+        val catMap = getCatMap(feature, data)
 
         val bins = if (catMap.size < maxSplitPoints)
           catMap.values.toVector.sorted
@@ -278,9 +283,9 @@ abstract class DecisionTree(
       splitPoints append splitPoint
       splitData(splitData.length -1) = leftData
       splitData append rightData
-      blockSummaries append summarizeResponse(leftData, weightColName.get, responseColName.get)
+      blockSummaries append summarizeResponse(leftData)
     }
-    blockSummaries append summarizeResponse(splitData.last, weightColName.get, responseColName.get)
+    blockSummaries append summarizeResponse(splitData.last)
 
     // Evaluate all cost functions for all considered splits
     val afterSplitCosts: Buffer[NumericalValue] = Buffer.empty
@@ -332,13 +337,17 @@ abstract class DecisionTree(
  * This trait contains methods required for the fitting adn prediction on regression trees.
  */
 sealed trait RegressionTreeLike extends WithBlockSummary {
+  protected var predictorColNames: Option[List[String]]
+  protected var responseColName: Option[String]
+  protected var weightColName: Option[String]
+
   protected case class RegressionBlockSummary(
       override val sum0: NumericalValue, val sum1: NumericalValue, val sum2: NumericalValue)
       extends BlockSummary(sum0)
-  protected def summarizeResponse(
-      data: DataFrame, weightColName: String, responseColName: String): BlockSummary = {
-    val weights: Series[NumericalValue] = data[NumericalValue](weightColName)
-    val responses: Series[NumericalValue] = data[NumericalValue](responseColName)
+
+  protected def summarizeResponse(data: DataFrame): BlockSummary = {
+    val weights: Series[NumericalValue] = data[NumericalValue](weightColName.get)
+    val responses: Series[NumericalValue] = data[NumericalValue](responseColName.get)
 
     RegressionBlockSummary(
       weights.sum, (weights :* responses).sum, (weights :* (responses :** 2)).sum)
@@ -369,10 +378,10 @@ sealed trait RegressionTreeLike extends WithBlockSummary {
    * @param responseColName
    * @param data
    */
-  protected def getCatMap(feature: String, responseColName: String, data: DataFrame):
+  protected def getCatMap(feature: String, data: DataFrame):
       Map[DataValue, NumericalValue] = {
     data.groupBy(row => row[DataValue](feature))
-      .map(kvpair => kvpair._1 -> kvpair._2[NumericalValue](responseColName).mean)
+      .map(kvpair => kvpair._1 -> kvpair._2[NumericalValue](responseColName.get).mean)
       .toList.sortBy(_._2).map(_._1).zipWithIndex
       .map(pair => pair._1 -> NumericalValue(pair._2)).toMap
   }
@@ -381,7 +390,26 @@ sealed trait RegressionTreeLike extends WithBlockSummary {
 sealed trait ClassificationTreeLike
 sealed trait BivariateClassificationTreeLike extends ClassificationTreeLike
 sealed trait MultivariateClassificationTreeLike extends ClassificationTreeLike
-sealed trait DecorrelatedTreeLike
+
+sealed trait DecorrelatedTreeLike {
+  protected var predictorColNames: Option[List[String]]
+  protected val maxFeaturesPerSplit: Any
+  protected def getDecorrelatedMaxFeaturesPerSplit: Int = {
+    val numFeatures = predictorColNames.get.length
+    math.min(numFeatures,
+      maxFeaturesPerSplit match {
+        case tag: String => tag match {
+          case "sqrt" => math.ceil(math.sqrt(numFeatures)).toInt
+          case "log2" => math.ceil(math.log(numFeatures) / math.log(2)).toInt
+          case _ => throw new RuntimeException("Invalid argument passed to maxFeaturesPerSplit")
+        }
+        case x: Double => math.ceil(x * numFeatures).toInt
+        case n: Int => n
+        case _ => throw new RuntimeException("maxFeaturesPerSplit of invalid type passed")
+      }
+    )
+  }
+}
 
 class RegressionTree(
     maxSplitPoints: Int = 10, minSplitPoints: Int = 1, maxDepth: Int = 100,
@@ -389,4 +417,28 @@ class RegressionTree(
     extends DecisionTree(maxSplitPoints, minSplitPoints, maxDepth, minSamplesSplit, minSamplesLeaf)
     with RegressionTreeLike
 
-// class DecorrelatedRegressionTree extends DecisionTree with RegressionTreeLike with DecorrelatedTreeLike
+/**
+ * Implementation of a decorrealted decision tree. This object is distinct from a standard
+ * decision tree in that as splits are evaluated, only a random subset of features are
+ * considered at each node. The goal is to ameliorate some of the downside of the greedy
+ * training approach and to sample a wider space of trees. The arguments are the same as the
+ * inputs to a standard decision tree, except for the inclusion of a new argument,
+ * num_features_per_split. Can pass a float (consider only a fraction of the features), an int
+ * (consider that many features), or a string. The two possible string inputs are 'sqrt'
+ * consider a number of features given by the square root of the number of features  or
+ * 'log2' (consider a number of features given by the log base 2 of the number of features).
+ * @param maxSplitPoints
+ * @param minSplitPoints
+ * @param maxDepth
+ * @param minSamplesSplit
+ * @param minSamplesLeaf
+ * @param maxFeaturesPerSplit
+ */
+class DecorrelatedRegressionTree(
+    maxSplitPoints: Int = 10, minSplitPoints: Int = 1, maxDepth: Int = 100,
+    minSamplesSplit: Int = 2, minSamplesLeaf: Int = 1,
+    protected val maxFeaturesPerSplit: Any = "sqrt")
+    extends DecisionTree(maxSplitPoints, minSplitPoints, maxDepth, minSamplesSplit, minSamplesLeaf)
+    with RegressionTreeLike with DecorrelatedTreeLike {
+  override protected def getMaxFeaturesPerSplit = getDecorrelatedMaxFeaturesPerSplit
+}

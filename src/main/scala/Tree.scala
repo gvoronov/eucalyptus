@@ -123,6 +123,6 @@ class BiTree(val root: Node) {
   def getRoot: Node = root
 
   def predict[T](row: Row): T = root.predict[T](row)
-  def predict[T](df: DataFrame): Series[T] = df.map((row: Row) => predict[T](row))
+  def predict[T](df: DataFrame): Series[T] = df.map(predict[T](_))
   def getLeaf(row: Row): Leaf = root.getLeaf(row)
 }
