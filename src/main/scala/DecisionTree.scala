@@ -107,9 +107,11 @@ abstract class DecisionTree(
     myMaxFeaturesPerSplit = Some(getMaxFeaturesPerSplit)
     fitRecursive(parsedX, 0)
   }
+  def predict(x: DataFrame): Series[DataValue]
+  def predict(x: Row): DataValue
   // def predict[T](x: DataFrame): Series[T] = x.map[T](predict[T](_))
-  def predict[T](x: DataFrame): Series[T] = tree.get.predict[T](x)
-  def predict[T](x: Row): T = tree.get.predict[T](x)
+  // def predict[T](x: DataFrame): Series[T] = tree.get.predict[T](x)
+  // def predict[T](x: Row): T = tree.get.predict[T](x)
 
   /**
    * Fit a decision tree by finding the best split and recusrively doing so on each partition
@@ -168,11 +170,6 @@ abstract class DecisionTree(
         case Some(catMap) => new BiNode(feature.get, split.get, catMap)
         case None => new BiNode(feature.get, split.get)
       }
-      // if (mySupport(feature.get).get.catMap.isDefined)
-      //   new BiNode(feature.get, split.get, )
-      //   // throw new RuntimeException("Not implemnted yet!")
-      // else
-      //   new BiNode(feature.get, split.get)
     } else
       createLeaf(data[DataValue](responseColName.get))
 
@@ -340,6 +337,7 @@ sealed trait RegressionTreeLike extends WithBlockSummary {
   protected var predictorColNames: Option[List[String]]
   protected var responseColName: Option[String]
   protected var weightColName: Option[String]
+  protected var tree: Option[BiTree]
 
   protected case class RegressionBlockSummary(
       override val sum0: NumericalValue, val sum1: NumericalValue, val sum2: NumericalValue)
@@ -358,7 +356,6 @@ sealed trait RegressionTreeLike extends WithBlockSummary {
     val regressionBlockSummary = blockSummary.asInstanceOf[RegressionBlockSummary]
     regressionBlockSummary.sum2 - ((regressionBlockSummary.sum1**2) / regressionBlockSummary.sum0)
   }
-  // protected def evalResponseOnCat = {}
   protected def reduceBlockSummary(
       leftBlockSummary: BlockSummary, rightBlockSummary: BlockSummary): BlockSummary = {
     val leftRegressionBlockSummary = leftBlockSummary.asInstanceOf[RegressionBlockSummary]
@@ -385,6 +382,8 @@ sealed trait RegressionTreeLike extends WithBlockSummary {
       .toList.sortBy(_._2).map(_._1).zipWithIndex
       .map(pair => pair._1 -> NumericalValue(pair._2)).toMap
   }
+  def predict(x: DataFrame): Series[NumericalValue] = tree.get.predict[NumericalValue](x)
+  def predict(x: Row): NumericalValue = tree.get.predict[NumericalValue](x)
 }
 
 sealed trait ClassificationTreeLike

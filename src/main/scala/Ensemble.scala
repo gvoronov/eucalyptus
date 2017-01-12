@@ -26,8 +26,8 @@ sealed trait Bagging {
     forest.foreach(fitTree)
   }
 
-  def predictEnsemble[T](x: Row): Series[T] = Series[T](forest.map(_.predict[T](x)))
-  def predictEnsemble[T](x: DataFrame): Series[Series[T]] = x.map(predictEnsemble[T](_))
+  def predictEnsemble[T](x: Row): Series[T] = Series[T](forest.map(_.predict(x).asInstanceOf[T]))
+  def predictEnsemble[T](x: DataFrame): Series[Series[T]] = x.map(predictEnsemble(_))
 }
 
 class BaggingRegressor(

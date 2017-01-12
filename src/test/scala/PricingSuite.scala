@@ -30,7 +30,7 @@ class RTreePricingSuite extends FunSuite {
     val fitTime = Duration.between(t, Instant.now).toMillis.toDouble / 1000
 
     t = Instant.now
-    val predictions = rtree.predict[NumericalValue](testingDf)
+    val predictions = rtree.predict(testingDf)
     val predictTime = Duration.between(t, Instant.now).toMillis.toDouble / 1000
 
     val mse = ((predictions :- testingDf[NumericalValue]("q_1")) :** 2).mean
@@ -52,7 +52,7 @@ class RTreePricingSuite extends FunSuite {
     val fitTime = Duration.between(t, Instant.now).toMillis.toDouble / 1000
 
     t = Instant.now
-    val predictions = rtree.predict[NumericalValue](testingDf)
+    val predictions = rtree.predict(testingDf)
     val predictTime = Duration.between(t, Instant.now).toMillis.toDouble / 1000
 
     val mse = ((predictions :- testingDf[NumericalValue]("q_1")) :** 2).mean
@@ -74,7 +74,7 @@ class RTreePricingSuite extends FunSuite {
     val fitTime = Duration.between(t, Instant.now).toMillis.toDouble / 1000
 
     t = Instant.now
-    val predictions = rtree.predict[NumericalValue](testingDf)
+    val predictions = rtree.predict(testingDf)
     val predictTime = Duration.between(t, Instant.now).toMillis.toDouble / 1000
 
     val mse = ((predictions :- testingDf[NumericalValue]("q_1")) :** 2).mean
@@ -96,7 +96,7 @@ class RTreePricingSuite extends FunSuite {
     val fitTime = Duration.between(t, Instant.now).toMillis.toDouble / 1000
 
     t = Instant.now
-    val predictions = rtree.predict[NumericalValue](testingDf)
+    val predictions = rtree.predict(testingDf)
     val predictTime = Duration.between(t, Instant.now).toMillis.toDouble / 1000
 
     val mse = ((predictions :- testingDf[NumericalValue]("q_1")) :** 2).mean
