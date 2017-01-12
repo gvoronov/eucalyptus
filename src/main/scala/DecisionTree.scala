@@ -4,9 +4,7 @@ import scala.math
 import scala.language.implicitConversions
 import scala.util.Random
 import scala.util.control.Breaks._
-// import scala.collection.mutable then Buffer -> mutable.Buffer and MutableMap -> mutable.Map
-import scala.collection.mutable.{Map => MutableMap}
-// import scala.collection.mutable.{ArrayBuffer => Buffer}
+import scala.collection.mutable 
 import scala.collection.mutable.Buffer
 
 import breeze.stats.distributions.Uniform
@@ -44,7 +42,7 @@ abstract class DecisionTree(
       feature: String, data: DataFrame): Map[DataValue, NumericalValue]
 
   // A few type aliases to reduce horrible long expressoins
-  protected type FeatureSupportDict = Option[MutableMap[String, Option[SupportDict]]]
+  protected type FeatureSupportDict = Option[mutable.Map[String, Option[SupportDict]]]
   protected type BestSplit = Tuple4[
     NumericalValue, Option[NumericalValue], Option[DataFrame],  Option[DataFrame]]
 
@@ -126,7 +124,7 @@ abstract class DecisionTree(
       data: DataFrame, depth: Int, support: FeatureSupportDict = None,
       parent: Option[Node] = None, key: Option[Boolean] = None): Unit = {
     val mySupport = support.getOrElse(
-      MutableMap(
+      mutable.Map(
         predictorColNames.get.map(predictor => (predictor -> (None: Option[SupportDict]))).toSeq: _*
       )
     )

@@ -5,7 +5,7 @@ package eucalyptus.tree
  */
 
 import scala.util.Random
-import scala.collection.mutable.{Map => MutableMap}
+import scala.collection.mutable
 
 import koalas.numericalops.NumericalOps._
 import koalas.datavalue._
@@ -37,7 +37,7 @@ sealed abstract class Node {
 class BiNode(
     val feature: String, val split: NumericalValue, val catMap: Map[DataValue, NumericalValue]=Map.empty)
     extends Node {
-  protected var children: MutableMap[Boolean, Node] = MutableMap.empty
+  protected var children: mutable.Map[Boolean, Node] = mutable.Map.empty
 
   /** A BiNode is explicitly not a leaf */
   val isLeaf = false
